@@ -18,9 +18,8 @@ define command projects ()
             (dir :: <pathname>, filename :: <string>, type :: <file-type>)
           if (type == #"file" & filename ~= "Open-Source-License.txt")
             if (last(filename) ~= '~')
-	      let p = as(<symbol>, filename);
-	      unless (member?(p, res))
-		res := pair(p, res);
+	      unless (member?(filename, res))
+		res := pair(filename, res);
 	      end;
             end;
           end;
@@ -41,15 +40,45 @@ end;
 
 define command edges (project)
   block()
-    let p = find-project(as(<string>, project));
+    let p = find-project(project);
     unless (open-project-compiler-database(p))
       parse-project-source(p)
     end;
     let used = project-used-projects(p);
-    list(#"new-edges", project, map(compose(curry(as, <symbol>), project-name), used))
+    list(#"new-edges", project, map(project-name, used))
   exception (c :: <condition>)
-    //format(*standard-error*, "couldn't parse project %= %=\n", project, c);
+    format(*standard-error*, "couldn't parse project %= %=\n", project, c);
     list(#"new-edges", project, #())
+  end;
+end;
+
+define command explore (project)
+  if (any?(curry(\==, ':'), project))
+    let items = split(project, ':');
+    let p = find-project(items[1]);
+    if (open-project-compiler-database(p))
+      let lib = project-library(p);
+      let mod = find-module(p, items[0], library: lib, imported?: #f, all-libraries?: #f);
+      let defs = module-definitions(p, mod, imported?: #f);
+      for (d in defs)
+	format(*standard-error*, "def %= %=\n", d, environment-object-display-name(p, d, #f));
+      end;
+      force-output(*standard-error*);
+      list(#"new-nodes-with-edge", project,
+	   map(rcurry(curry(environment-object-display-name, p), #f), defs));
+    else
+      list(#"new-edges", project, #("not-opened"))
+    end;
+  else
+    let p = find-project(project);
+    if (open-project-compiler-database(p))
+      let lib = project-library(p);
+      let ms = library-modules(p, lib, imported?: #f);
+      list(#"new-nodes-with-edge", project,
+	   map(rcurry(curry(environment-object-display-name, p), #f), ms));
+    else
+      list(#"new-edges", project, #("not-opened"))
+    end;
   end;
 end;
 
